@@ -277,7 +277,8 @@ else:
     ).mark_line(point=True).encode(
         x="time:T", y="valor:Q", color="serie:N", tooltip=["time:T", "serie:N", "valor:Q"]
     )
-    st.altair_chart(chart, width='stretch')
+    
+    st.altair_chart(chart, use_container_width=True)
 
     # --- Debug ---
     with st.expander("Debug – Resposta da API"):
