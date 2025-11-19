@@ -3,8 +3,8 @@ import json
 import datetime as dt
 from pathlib import Path
 from typing import Dict, Any, List
-
-import altair as alt
+import plotly.express as px
+import plotly.graph_objects as go
 import requests
 import pandas as pd
 import streamlit as st
@@ -253,6 +253,10 @@ else:
     df = df_current.copy()
     if phone_choice != "Todos":
         df = df[df["phone"].astype(str) == str(phone_choice)]
+        
+    df["date"] = df["time"].dt.date            
+    current_waba_name = wabas[waba_idx]["name"]
+    df["waba"] = current_waba_name
 
     # --- Cards ---
     total_vol = int(df["volume"].sum())
@@ -264,22 +268,49 @@ else:
     c1.metric("Volume total", f"{total_vol:,}".replace(",", "."))
     c2.metric("Mensagens pagas", f"{paid_vol:,}".replace(",", "."))
     c3.metric("Custo", usd(paid_cost))
-
-    # --- Gráfico diário ---
-    daily_total = df.groupby("time", as_index=False)[["volume"]].sum().rename(columns={"volume": "volume_total"})
-    daily_paid = df.loc[paid_mask].groupby("time", as_index=False)[["volume"]].sum().rename(columns={"volume": "volume_pagas"})
-    daily = pd.merge(daily_total, daily_paid, on="time", how="left").fillna(0)
-
-    st.subheader(f"Evolução diária")
-
-    chart = alt.Chart(daily).transform_fold(
-        ["volume_total", "volume_pagas"], as_=["serie", "valor"]
-    ).mark_line(point=True).encode(
-        x="time:T", y="valor:Q", color="serie:N", tooltip=["time:T", "serie:N", "valor:Q"]
-    )
     
-    st.altair_chart(chart, use_container_width=True)
+    # --- Gráfico evolução diária ---
+    daily_total = (
+        df.groupby("date", as_index=False)["volume"]
+        .sum()
+        .rename(columns={"volume": "volume_total"})
+    )
 
-    # --- Debug ---
-    with st.expander("Debug – Resposta da API"):
-        st.code(json.dumps(st.session_state.data_by_waba[current_waba_id]["payload"], indent=2))
+    daily_pagas = (
+        df[df["pricing_type"].str.upper().isin(PAID_TYPES)]
+        .groupby("date", as_index=False)["volume"]
+        .sum()
+        .rename(columns={"volume": "volume_pagas"})
+    )
+
+    daily = pd.merge(daily_total, daily_pagas, on="date", how="left").fillna(0)
+
+    fig = px.line(
+        daily,
+        x="date",
+        y=["volume_total", "volume_pagas"],
+        markers=True,
+        title="Evolução Diária"
+    )
+
+    st.plotly_chart(fig, width="stretch")
+    
+    # --- Tabela detalhada ---
+    tabela = (
+    df.groupby(["date", "waba", "phone"], as_index=False)
+      .agg(mensagens_pagas=("volume", "sum"))
+      .sort_values(["date", "waba", "phone"])
+    )
+
+    with st.expander("Ver tabela detalhada"):
+        st.dataframe(tabela, width="stretch")
+
+        csv = tabela.to_csv(index=False).encode()
+        st.download_button(
+            "Baixar CSV",
+            csv,
+            "mensagens_pagas.csv",
+            "text/csv"
+        )
+
+
