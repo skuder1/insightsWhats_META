@@ -153,7 +153,7 @@ def load_wabas() -> list[dict]:
     return []
 
 # =========================
-# Sidebar (WABA + datas + buscar)
+# Sidebar 
 # =========================
 with st.sidebar:
     st.header("Parâmetros")
@@ -163,16 +163,6 @@ with st.sidebar:
     if not wabas:
         st.error("Nenhuma conta disponível.")
         st.stop()
-
-    # Select WABA 
-    waba_labels = [w.get("name") or w["id"] for w in wabas]
-    waba_ids    = [w["id"] for w in wabas]
-    # Seleciona atual se existir, senão a primeira
-    initial_index = waba_ids.index(st.session_state.selected_waba) if st.session_state.selected_waba in waba_ids else 0
-    waba_idx = st.selectbox(
-    "Conta", options=list(range(len(wabas))), index=initial_index, format_func=lambda i: waba_labels[i], key="waba_select")
-    current_waba_id = waba_ids[waba_idx]
-    st.session_state.selected_waba = current_waba_id
 
     # Regra do dia 15, data sempre começa dia 15
     today = dt.date.today()
@@ -197,68 +187,114 @@ if fetch_btn:
         st.error("Data inicial não pode ser maior que a final.")
         st.stop()
 
-    try:
-        payload = fetch_pricing_analytics(
-            current_waba_id,
-            to_epoch(start_date, end=False),
-            to_epoch(end_date, end=True),
-            TOKEN,
-            "DAILY",
-        )
-        df = parse_to_df(payload)
-    except requests.HTTPError as e:
-        st.error(f"Erro HTTP: {e}")
+    st.info("Carregando dados de todas as contas...")
+
+    st.session_state.data_by_waba = {} 
+
+    for w in wabas:
+        waba_id = w["id"]
+        waba_name = w.get("name", waba_id)
+
+        try:
+            payload = fetch_pricing_analytics(
+                waba_id,
+                to_epoch(start_date, end=False),
+                to_epoch(end_date, end=True),
+                TOKEN,
+                "DAILY",
+            )
+
+            df = parse_to_df(payload)
+
+            st.session_state.data_by_waba[waba_id] = {
+                "payload": payload,
+                "df": df,
+                "name": waba_name,
+            }
+
+        except requests.HTTPError as e:
+            # conta sem dados -> salva como vazia
+            if e.response.status_code == 400:
+                st.session_state.data_by_waba[waba_id] = {
+                    "payload": None,
+                    "df": pd.DataFrame(),
+                    "name": waba_name,
+                }
+                continue
+            else:
+                st.warning(f"Falha ao carregar dados da conta {waba_name}: {e}")
+
+        except Exception as e:
+            st.warning(f"Erro ao carregar WABA {waba_name}: {e}")
+
+    if not st.session_state.data_by_waba:
+        st.error("Nenhuma conta retornou dados para o período selecionado.")
+    else:
+        st.success("Dados carregados.")
+
+tab1, tab2 = st.tabs(["Dashboard", "Limites"])
+
+# =============================
+#       TAB 1 (Dashboard)
+# =============================
+with tab1:
+    # Nenhum dado carregado ainda
+    if not st.session_state.get("data_by_waba"):
+        st.info("Busque dados na barra lateral antes de visualizar o dashboard.")
         st.stop()
-    except requests.RequestException as e:
-        st.error(f"Erro de rede: {e}")
+
+    # Lista de WABAs válidas
+    todas_wabas_ids = list(st.session_state.data_by_waba.keys())
+
+    if not todas_wabas_ids:
+        st.warning("Nenhuma WABA retornou dados válidos.")
         st.stop()
 
-    st.session_state.data_by_waba[current_waba_id] = {"payload": payload, "df": df}
-
-# =========================
-# Filtro de número 
-# =========================
-cache = st.session_state.data_by_waba.get(current_waba_id)
-df_current = None if cache is None else cache.get("df")
-
-with st.sidebar:
-    phone_options = [""]
-    try:
-        api_numbers = fetch_numbers_via_api(current_waba_id, TOKEN)  
-    except requests.RequestException:
-        api_numbers = []
-
-    if api_numbers:
-        phone_options += [n.get("display") or "" for n in api_numbers if n.get("display")]
-
-    cache = st.session_state.data_by_waba.get(current_waba_id)
-    df_current = None if cache is None else cache.get("df")
-    if (not api_numbers) and df_current is not None and not df_current.empty and "phone" in df_current.columns:
-        phones_from_df = df_current["phone"].dropna().astype(str).unique().tolist()
-        phone_options += phones_from_df
-
-    phone_choice = st.selectbox(
-        "Filtrar número",
-        options=["Todos"] + sorted(set([p for p in phone_options if p])), 
-        index=0,
-        key=f"phone_choice_{current_waba_id}",
+    # Selectbox da WABA
+    waba_escolhida = st.selectbox(
+        "Selecione a WABA",
+        todas_wabas_ids,
+        format_func=lambda x: st.session_state.data_by_waba[x]["name"],
     )
 
-# =========================
-# Render principal
-# =========================
-if df_current is None or df_current.empty:
-    st.info("Selecione a conta, o período na barra lateral e clique em **Buscar**.")
-else:
-    df = df_current.copy()
-    if phone_choice != "Todos":
-        df = df[df["phone"].astype(str) == str(phone_choice)]
-        
-    df["date"] = df["time"].dt.date            
-    current_waba_name = wabas[waba_idx]["name"]
+    df_current = st.session_state.data_by_waba[waba_escolhida]["df"]
+
+    if df_current.empty:
+        st.warning("Sem dados para o período selecionado.")
+        st.stop()
+
+    # -----------------------------------------
+    # Filtro de número (multiselect)
+    # -----------------------------------------
+    numeros = sorted(df_current["phone"].astype(str).dropna().unique())
+
+    phone_choices = st.multiselect(
+        "Selecione os números",
+        numeros,
+        default=[]  # vazio = todos
+    )
+
+    df_filtered = df_current.copy()
+
+    if phone_choices:
+        df_filtered = df_filtered[df_filtered["phone"].isin(phone_choices)]
+
+    if df_filtered.empty:
+        st.warning("Sem dados para esses números no período selecionado.")
+        st.stop()
+
+    # -----------------------------------------
+    # Agora sim, df oficial para uso
+    # -----------------------------------------
+    df = df_filtered.copy()
+    df["date"] = df["time"].dt.date
+
+    current_waba_name = st.session_state.data_by_waba[waba_escolhida]["name"]
     df["waba"] = current_waba_name
 
-    # --- Cards ---
+    # -----------------------------
+    # CARDS
+    # -----------------------------
     total_vol = int(df["volume"].sum())
     paid_mask = df["pricing_type"].str.upper().isin(PAID_TYPES)
     paid_vol = int(df.loc[paid_mask, "volume"].sum())
@@ -268,8 +304,10 @@ else:
     c1.metric("Volume total", f"{total_vol:,}".replace(",", "."))
     c2.metric("Mensagens pagas", f"{paid_vol:,}".replace(",", "."))
     c3.metric("Custo", usd(paid_cost))
-    
-    # --- Gráfico evolução diária ---
+
+    # -----------------------------
+    # GRÁFICO
+    # -----------------------------
     daily_total = (
         df.groupby("date", as_index=False)["volume"]
         .sum()
@@ -277,7 +315,7 @@ else:
     )
 
     daily_pagas = (
-        df[df["pricing_type"].str.upper().isin(PAID_TYPES)]
+        df[paid_mask]
         .groupby("date", as_index=False)["volume"]
         .sum()
         .rename(columns={"volume": "volume_pagas"})
@@ -294,12 +332,14 @@ else:
     )
 
     st.plotly_chart(fig, width="stretch")
-    
-    # --- Tabela detalhada ---
+
+    # -----------------------------
+    # TABELA
+    # -----------------------------
     tabela = (
-    df.groupby(["date", "waba", "phone"], as_index=False)
-      .agg(mensagens_pagas=("volume", "sum"))
-      .sort_values(["date", "waba", "phone"])
+        df.groupby(["date", "waba", "phone"], as_index=False)
+        .agg(mensagens_pagas=("volume", "sum"))
+        .sort_values(["date", "waba", "phone"])
     )
 
     with st.expander("Ver tabela detalhada"):
@@ -312,5 +352,71 @@ else:
             "mensagens_pagas.csv",
             "text/csv"
         )
+pass
 
+# =============================
+#       TAB 2 (Limites)
+# =============================
+with tab2:
+    # carregar configuração de grupos
+    try:
+        group_cfg = json.load(open(APP_DIR / "responsaveis.json", encoding="utf-8"))
+    except Exception as e:
+        st.error(f"Erro ao carregar responsaveis.json: {e}")
+        group_cfg = {}
 
+    # pegar TODOS os df carregados (independe da sidebar)
+    dfs = [v["df"] for v in st.session_state.data_by_waba.values() if v.get("df") is not None]
+    df_all = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
+    if df_all.empty:
+        st.info("Busque dados de pelo menos uma WABA na aba principal.")
+        st.stop()
+
+    df_all["phone"] = df_all["phone"].astype(str)
+    df_all["date"] = df_all["time"].dt.date
+
+    # ----------------------------
+    # Data
+    # ----------------------------
+    hoje = dt.date.today()
+
+    ini, fim = start_date, end_date
+
+    # filtrar df geral pelo ciclo
+    df_ciclo = df_all[(df_all["date"] >= ini) & (df_all["date"] <= fim)]
+
+    # ----------------------------
+    # Renderização por grupo
+    # ----------------------------
+    for grupo, cfg in group_cfg.items():
+
+        numeros = [str(n) for n in cfg.get("numeros", [])]
+        limite = cfg.get("limite", 0)
+
+        df_g = df_ciclo[df_ciclo["phone"].isin(numeros)]
+
+        st.subheader(grupo)
+
+        if df_g.empty:
+            st.warning("Nenhum dado encontrado para este grupo neste ciclo.")
+            continue
+
+        df_pagas = df_g[df_g["pricing_type"].str.upper().isin(PAID_TYPES)]
+
+        usadas = int(df_pagas["volume"].sum())
+        custo = float(df_pagas["cost"].sum())
+        perc = (usadas / limite * 100) if limite > 0 else 0
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Pagas usadas", f"{usadas:,}".replace(",", "."))
+        c2.metric("Limite", f"{limite:,}".replace(",", "."))
+        c3.metric("% utilizado", f"{perc:.1f}%")
+        c4.metric("Custo total", usd(custo))
+
+        if limite > 0:
+            st.progress(min(perc / 100, 1.0))
+        else:
+            st.info("Nenhum limite definido para este grupo.")
+
+        st.markdown("---")

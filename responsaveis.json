@@ -1,0 +1,53 @@
+{
+    "JONAS IA": {
+        "responsavel": "JONAS IA",
+        "numeros": [
+            "556298498800"
+        ],
+        "wabas": [
+            "Auvo Tecnologia",
+            "AUVO Tecnologia",
+            "AUVO tecnologia"
+        ],
+        "limite": 0
+    },
+
+    "REC": {
+        "responsavel": "REC",
+        "numeros": [
+            "554896038597",
+            "554137971151"
+        ],
+        "wabas": [
+            "Auvo Tecnologia - Campanhas",
+            "Auvo REC (Duo)"
+        ],
+        "limite": 10000
+    },
+
+    "SDR": {
+        "responsavel": "SDR",
+        "numeros": [
+            "15557903479",
+            "15558081363",
+            "556239888660"
+        ],
+        "wabas": [
+            "Auvo Tecnologia - Campanhas",
+            "Auvo SDR BR"
+        ],
+        "limite": 10000
+    },
+
+    "GROWTH": {
+        "responsavel": "GROWTH",
+        "numeros": [
+            "15558000518",
+            "554840425274"
+        ],
+        "wabas": [
+            "Auvo Tecnologia - Campanhas"
+        ],
+        "limite": 10000
+    }
+}
