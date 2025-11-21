@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 # =========================
 st.set_page_config(
     page_title="Controle ZapZap",
-    page_icon=r"C:\Users\Auvo1\Desktop\PythonProjects\insightsWhats_META\assets\logo-2.webp", 
+    page_icon=r"assets\logo-2.webp", 
     layout="wide",
 )
 load_dotenv()
@@ -232,10 +232,10 @@ if fetch_btn:
     else:
         st.success("Dados carregados.")
 
-tab1, tab2 = st.tabs(["Dashboard", "Limites"])
+tab1, tab2 = st.tabs(["Geral", "Limites"])
 
 # =============================
-#       TAB 1 (Dashboard)
+#       TAB 1 (Geral)
 # =============================
 with tab1:
     # Nenhum dado carregado ainda
