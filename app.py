@@ -32,7 +32,6 @@ if not TOKEN:
     st.stop()
 
 APP_DIR = Path(__file__).resolve().parent
-WABAS_FILE = APP_DIR / "wabas.json"
 
 if "data_by_waba" not in st.session_state:
     st.session_state.data_by_waba = {}
@@ -138,15 +137,7 @@ def load_wabas() -> list[dict]:
             if items:
                 return items
         except requests.RequestException as e:
-            st.warning(f"Falha ao listar WABAs via API: {e}")
-
-
-    try:
-        if WABAS_FILE.exists():
-            return json.loads(WABAS_FILE.read_text(encoding="utf-8"))
-    except Exception as e:
-        st.warning(f"Falha ao ler wabas.json: {e}")
-
+            st.warning(f"Falha ao consultar as contas via API: {e}")
 
     if DEFAULT_WABA_ID:
         return [{"id": DEFAULT_WABA_ID, "name": f"Default ({DEFAULT_WABA_ID})"}]
@@ -225,7 +216,7 @@ if fetch_btn:
                 st.warning(f"Falha ao carregar dados da conta {waba_name}: {e}")
 
         except Exception as e:
-            st.warning(f"Erro ao carregar WABA {waba_name}: {e}")
+            st.warning(f"Erro ao carregar conta {waba_name}: {e}")
 
     if not st.session_state.data_by_waba:
         st.error("Nenhuma conta retornou dados para o período selecionado.")
@@ -247,12 +238,12 @@ with tab1:
     todas_wabas_ids = list(st.session_state.data_by_waba.keys())
 
     if not todas_wabas_ids:
-        st.warning("Nenhuma WABA retornou dados válidos.")
+        st.warning("Nenhuma conta retornou dados válidos.")
         st.stop()
 
-    # Selectbox da WABA
+    # Selectbox da conta
     waba_escolhida = st.selectbox(
-        "Selecione a WABA",
+        "Selecione a conta",
         todas_wabas_ids,
         format_func=lambda x: st.session_state.data_by_waba[x]["name"],
     )
@@ -264,14 +255,14 @@ with tab1:
         st.stop()
 
     # -----------------------------------------
-    # Filtro de número (multiselect)
+    # Filtro de número
     # -----------------------------------------
     numeros = sorted(df_current["phone"].astype(str).dropna().unique())
 
     phone_choices = st.multiselect(
         "Selecione os números",
         numeros,
-        default=[]  # vazio = todos
+        default=[] 
     )
 
     df_filtered = df_current.copy()
@@ -283,9 +274,6 @@ with tab1:
         st.warning("Sem dados para esses números no período selecionado.")
         st.stop()
 
-    # -----------------------------------------
-    # Agora sim, df oficial para uso
-    # -----------------------------------------
     df = df_filtered.copy()
     df["date"] = df["time"].dt.date
 
@@ -301,9 +289,9 @@ with tab1:
     paid_cost = float(df.loc[paid_mask, "cost"].sum())
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Volume total", f"{total_vol:,}".replace(",", "."))
-    c2.metric("Mensagens pagas", f"{paid_vol:,}".replace(",", "."))
-    c3.metric("Custo", usd(paid_cost))
+    c1.metric("Volume total", f"{total_vol:,}".replace(",", "."), help="Total de mensagens enviadas no período")
+    c2.metric("Mensagens pagas", f"{paid_vol:,}".replace(",", "."),help="Mensagens tarifadas pela Meta")
+    c3.metric("Custo", usd(paid_cost),help="Custo total das mensagens pagas")
 
     # -----------------------------
     # GRÁFICO
@@ -365,12 +353,12 @@ with tab2:
         st.error(f"Erro ao carregar responsaveis.json: {e}")
         group_cfg = {}
 
-    # pegar TODOS os df carregados (independe da sidebar)
+    # pegar TODOS os df carregados 
     dfs = [v["df"] for v in st.session_state.data_by_waba.values() if v.get("df") is not None]
     df_all = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
 
     if df_all.empty:
-        st.info("Busque dados de pelo menos uma WABA na aba principal.")
+        st.info("Busque dados antes de visualizar.")
         st.stop()
 
     df_all["phone"] = df_all["phone"].astype(str)
@@ -383,7 +371,7 @@ with tab2:
 
     ini, fim = start_date, end_date
 
-    # filtrar df geral pelo ciclo
+    # filtrar df geral pelo periodo
     df_ciclo = df_all[(df_all["date"] >= ini) & (df_all["date"] <= fim)]
 
     # ----------------------------
@@ -399,7 +387,7 @@ with tab2:
         st.subheader(grupo)
 
         if df_g.empty:
-            st.warning("Nenhum dado encontrado para este grupo neste ciclo.")
+            st.warning("Nenhum dado encontrado para este grupo neste período.")
             continue
 
         df_pagas = df_g[df_g["pricing_type"].str.upper().isin(PAID_TYPES)]
@@ -409,10 +397,10 @@ with tab2:
         perc = (usadas / limite * 100) if limite > 0 else 0
 
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Pagas usadas", f"{usadas:,}".replace(",", "."))
-        c2.metric("Limite", f"{limite:,}".replace(",", "."))
-        c3.metric("% utilizado", f"{perc:.1f}%")
-        c4.metric("Custo total", usd(custo))
+        c1.metric("Pagas usadas", f"{usadas:,}".replace(",", "."),help="Mensagens pagas que foram enviadas")
+        c2.metric("Limite", f"{limite:,}".replace(",", "."),help="Limite de mensagens pagas definido pela Auvo")
+        c3.metric("Utilizado", f"{perc:.1f}%",help="Taxa de uso em relação ao limite")
+        c4.metric("Custo total", usd(custo),help="Custo total das mensagens pagas")
 
         if limite > 0:
             st.progress(min(perc / 100, 1.0))
