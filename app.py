@@ -9,6 +9,7 @@ import requests
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
+import json
 
 # =========================
 # Setup
@@ -348,9 +349,10 @@ pass
 with tab2:
     # carregar configuração de grupos
     try:
-        group_cfg = json.load(open(APP_DIR / "responsaveis.json", encoding="utf-8"))
+        grupos_raw = st.secrets["GRUPOS"]
+        group_cfg = {nome: json.loads(cfg_str) for nome, cfg_str in grupos_raw.items()}
     except Exception as e:
-        st.error(f"Erro ao carregar responsaveis.json: {e}")
+        st.error(f"Erro ao carregar grupos")
         group_cfg = {}
 
     # pegar TODOS os df carregados 
