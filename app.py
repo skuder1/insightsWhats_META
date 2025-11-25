@@ -16,7 +16,7 @@ import json
 # =========================
 st.set_page_config(
     page_title="Controle ZapZap",
-    page_icon=r"assets\logo-2.webp", 
+    page_icon="assets/logo-2.webp", 
     layout="wide",
 )
 load_dotenv()
