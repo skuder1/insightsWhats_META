@@ -349,14 +349,27 @@ with tab1:
     )
 
     grp = pd.merge(grp_total, grp_pagas, on="period", how="left").fillna(0)
+    
+    mostrar_valores = st.checkbox("Mostrar valores no gráfico")
 
     fig = px.line(
-        grp,
-        x="period",
-        y=["volume_total", "volume_pagas"],
-        markers=True,
-        title=f"Evolução ({periodo})"
+    grp,
+    x="period",
+    y=["volume_total", "volume_pagas"],
+    markers=True,
+    title=f"Evolução ({periodo})"
     )
+
+    if mostrar_valores:
+        fig.update_traces(
+            mode="lines+markers+text",
+            text=grp["volume_total"],
+            textposition="top center"
+        )
+    else:
+        fig.update_traces(
+            mode="lines+markers"
+        )
 
     st.plotly_chart(fig, width="stretch")
 
