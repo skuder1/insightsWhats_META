@@ -230,39 +230,45 @@ tab1, tab2 = st.tabs(["Geral", "Limites"])
 #       TAB 1 (Geral)
 # =============================
 with tab1:
-    # Nenhum dado carregado ainda
+
     if not st.session_state.get("data_by_waba"):
         st.info("Busque dados na barra lateral antes de visualizar o dashboard.")
         st.stop()
 
-    # Lista de WABAs válidas
     todas_wabas_ids = list(st.session_state.data_by_waba.keys())
 
     if not todas_wabas_ids:
         st.warning("Nenhuma conta retornou dados válidos.")
         st.stop()
 
-    # Selectbox da conta
-    waba_escolhida = st.multiselect(
-    "Selecione as contas",
-    todas_wabas_ids,
-    default=todas_wabas_ids,  # todas por padrão
-    format_func=lambda x: st.session_state.data_by_waba[x]["name"],
+    # Seleção múltipla de contas 
+    waba_selecionadas = st.multiselect(
+        "Selecione as contas",
+        todas_wabas_ids,
+        default=todas_wabas_ids,
+        format_func=lambda x: st.session_state.data_by_waba[x]["name"],
     )
 
+    if not waba_selecionadas:
+        waba_selecionadas = todas_wabas_ids
 
-    dfs = [
-    st.session_state.data_by_waba[w]["df"]
-    for w in waba_escolhida
-    if not st.session_state.data_by_waba[w]["df"].empty
-    ]
+    # Concatena DFs das contas escolhidas
+    dfs = []
+    for w in waba_selecionadas:
+        df_temp = st.session_state.data_by_waba[w]["df"].copy()
+        if not df_temp.empty:
+            df_temp["waba"] = st.session_state.data_by_waba[w]["name"]  
+            dfs.append(df_temp)
 
     df_current = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
-
 
     if df_current.empty:
         st.warning("Sem dados para o período selecionado.")
         st.stop()
+
+    # Normaliza
+    df_current["phone"] = df_current["phone"].astype(str)
+    df_current["date"] = df_current["time"].dt.date
 
     # -----------------------------------------
     # Filtro de número
