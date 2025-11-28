@@ -4,12 +4,10 @@ import datetime as dt
 from pathlib import Path
 from typing import Dict, Any, List
 import plotly.express as px
-import plotly.graph_objects as go
 import requests
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
-import json
 
 # =========================
 # Setup
@@ -36,8 +34,6 @@ APP_DIR = Path(__file__).resolve().parent
 
 if "data_by_waba" not in st.session_state:
     st.session_state.data_by_waba = {}
-if "selected_waba" not in st.session_state:
-    st.session_state.selected_waba = DEFAULT_WABA_ID or None
 
 # =========================
 # Helpers
@@ -65,20 +61,6 @@ def fetch_wabas_via_api(business_id: str, token: str) -> list[dict]:
     params = {"fields": "id,name", "access_token": token}
     items = _get_all_pages(url, params)
     return [{"id": it.get("id"), "name": it.get("name") or it.get("id")} for it in items if it.get("id")]
-
-@st.cache_data(ttl=600)
-def fetch_numbers_via_api(waba_id: str, token: str) -> list[dict]:
-    url = f"{BASE}/{waba_id}/phone_numbers"
-    params = {"fields": "id,display_phone_number,verified_name", "access_token": token}
-    items = _get_all_pages(url, params)
-    res = []
-    for it in items:
-        res.append({
-            "id": it.get("id"),
-            "display": it.get("display_phone_number") or "",
-            "name": it.get("verified_name") or "",
-        })
-    return res
 
 def to_epoch(d: dt.date, end=False) -> int:
     dt_obj = dt.datetime.combine(d, dt.time.max if end else dt.time.min)
@@ -245,7 +227,7 @@ with tab1:
     waba_selecionadas = st.multiselect(
         "Selecione as contas",
         todas_wabas_ids,
-        default=todas_wabas_ids,
+        default=[],
         format_func=lambda x: st.session_state.data_by_waba[x]["name"],
     )
 
@@ -293,6 +275,30 @@ with tab1:
     df = df_filtered.copy()
     df["date"] = df["time"].dt.date
 
+
+    # -----------------------------------------
+    # Periodicidade
+    # -----------------------------------------
+    periodo = st.radio(
+        "Periodicidade",
+        ["Diário", "Semanal", "Mensal"],
+        horizontal=True
+    )
+
+    df_group = df.copy()
+    df_group["date"] = pd.to_datetime(df_group["date"], errors="coerce")
+
+    if periodo == "Diário":
+        df_group["period"] = df_group["date"]
+
+    elif periodo == "Semanal":
+        df_group["period"] = df_group["date"] - pd.to_timedelta(df_group["date"].dt.weekday, unit="D")
+    
+    elif periodo == "Mensal":
+        df_group["period"] = df_group["date"].values.astype("datetime64[M]").astype("datetime64[D]")
+    
+    df_group["period"] = df_group["period"].dt.date
+
     # -----------------------------
     # CARDS
     # -----------------------------
@@ -309,38 +315,54 @@ with tab1:
     # -----------------------------
     # GRÁFICO
     # -----------------------------
-    daily_total = (
-        df.groupby("date", as_index=False)["volume"]
-        .sum()
-        .rename(columns={"volume": "volume_total"})
+    paid_mask = df_group["pricing_type"].str.upper().isin(PAID_TYPES)
+
+    grp_total = (
+        df_group.groupby("period", as_index=False)["volume"]
+            .sum()
+            .rename(columns={"volume": "volume_total"})
     )
 
-    daily_pagas = (
-        df[paid_mask]
-        .groupby("date", as_index=False)["volume"]
-        .sum()
-        .rename(columns={"volume": "volume_pagas"})
+    grp_pagas = (
+        df_group[paid_mask]
+            .groupby("period", as_index=False)["volume"]
+            .sum()
+            .rename(columns={"volume": "volume_pagas"})
     )
 
-    daily = pd.merge(daily_total, daily_pagas, on="date", how="left").fillna(0)
+    grp = pd.merge(grp_total, grp_pagas, on="period", how="left").fillna(0)
+    
+    mostrar_valores = st.checkbox("Mostrar valores no gráfico")
 
     fig = px.line(
-        daily,
-        x="date",
-        y=["volume_total", "volume_pagas"],
-        markers=True,
-        title="Evolução Diária"
+    grp,
+    x="period",
+    y=["volume_total", "volume_pagas"],
+    markers=True,
+    title=f"Evolução ({periodo})"
     )
 
+    if mostrar_valores:
+        fig.update_traces(
+            mode="lines+markers+text",
+            text=grp["volume_total"],
+            textposition="top center"
+        )
+    else:
+        fig.update_traces(
+            mode="lines+markers"
+        )
+
     st.plotly_chart(fig, width="stretch")
+
 
     # -----------------------------
     # TABELA
     # -----------------------------
     tabela = (
-        df.groupby(["date", "waba", "phone"], as_index=False)
+    df_group.groupby(["period", "waba", "phone"], as_index=False)
         .agg(mensagens_pagas=("volume", "sum"))
-        .sort_values(["date", "waba", "phone"])
+        .sort_values(["period", "waba", "phone"])
     )
 
     with st.expander("Ver tabela detalhada"):
@@ -381,7 +403,6 @@ with tab2:
     # ----------------------------
     # Data
     # ----------------------------
-    hoje = dt.date.today()
 
     ini, fim = start_date, end_date
 
@@ -399,6 +420,11 @@ with tab2:
         df_g = df_ciclo[df_ciclo["phone"].isin(numeros)]
 
         st.subheader(grupo)
+        
+        if numeros:
+            st.caption("Números no grupo: " + ", ".join(numeros))
+        else:
+            st.caption("Nenhum número configurado para este grupo.")
 
         if df_g.empty:
             st.warning("Nenhum dado encontrado para este grupo neste período.")
