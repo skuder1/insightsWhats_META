@@ -293,9 +293,6 @@ with tab1:
     df = df_filtered.copy()
     df["date"] = df["time"].dt.date
 
-    current_waba_name = st.session_state.data_by_waba[waba_escolhida]["name"]
-    df["waba"] = current_waba_name
-
     # -----------------------------
     # CARDS
     # -----------------------------
