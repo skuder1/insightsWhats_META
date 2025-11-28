@@ -245,7 +245,7 @@ with tab1:
     waba_selecionadas = st.multiselect(
         "Selecione as contas",
         todas_wabas_ids,
-        default=todas_wabas_ids,
+        default=[],
         format_func=lambda x: st.session_state.data_by_waba[x]["name"],
     )
 
@@ -293,6 +293,30 @@ with tab1:
     df = df_filtered.copy()
     df["date"] = df["time"].dt.date
 
+
+    # -----------------------------------------
+    # Periodicidade
+    # -----------------------------------------
+    periodo = st.radio(
+        "Periodicidade",
+        ["Diário", "Semanal", "Mensal"],
+        horizontal=True
+    )
+
+    df_group = df.copy()
+    df_group["date"] = pd.to_datetime(df_group["date"], errors="coerce")
+
+    if periodo == "Diário":
+        df_group["period"] = df_group["date"]
+
+    elif periodo == "Semanal":
+        df_group["period"] = df_group["date"] - pd.to_timedelta(df_group["date"].dt.weekday, unit="D")
+    
+    elif periodo == "Mensal":
+        df_group["period"] = df_group["date"].values.astype("datetime64[M]").astype("datetime64[D]")
+    
+    df_group["period"] = df_group["period"].dt.date
+
     # -----------------------------
     # CARDS
     # -----------------------------
@@ -309,38 +333,41 @@ with tab1:
     # -----------------------------
     # GRÁFICO
     # -----------------------------
-    daily_total = (
-        df.groupby("date", as_index=False)["volume"]
-        .sum()
-        .rename(columns={"volume": "volume_total"})
+    paid_mask = df_group["pricing_type"].str.upper().isin(PAID_TYPES)
+
+    grp_total = (
+        df_group.groupby("period", as_index=False)["volume"]
+            .sum()
+            .rename(columns={"volume": "volume_total"})
     )
 
-    daily_pagas = (
-        df[paid_mask]
-        .groupby("date", as_index=False)["volume"]
-        .sum()
-        .rename(columns={"volume": "volume_pagas"})
+    grp_pagas = (
+        df_group[paid_mask]
+            .groupby("period", as_index=False)["volume"]
+            .sum()
+            .rename(columns={"volume": "volume_pagas"})
     )
 
-    daily = pd.merge(daily_total, daily_pagas, on="date", how="left").fillna(0)
+    grp = pd.merge(grp_total, grp_pagas, on="period", how="left").fillna(0)
 
     fig = px.line(
-        daily,
-        x="date",
+        grp,
+        x="period",
         y=["volume_total", "volume_pagas"],
         markers=True,
-        title="Evolução Diária"
+        title=f"Evolução ({periodo})"
     )
 
     st.plotly_chart(fig, width="stretch")
+
 
     # -----------------------------
     # TABELA
     # -----------------------------
     tabela = (
-        df.groupby(["date", "waba", "phone"], as_index=False)
+    df_group.groupby(["period", "waba", "phone"], as_index=False)
         .agg(mensagens_pagas=("volume", "sum"))
-        .sort_values(["date", "waba", "phone"])
+        .sort_values(["period", "waba", "phone"])
     )
 
     with st.expander("Ver tabela detalhada"):
