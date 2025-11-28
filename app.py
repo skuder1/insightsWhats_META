@@ -243,13 +243,22 @@ with tab1:
         st.stop()
 
     # Selectbox da conta
-    waba_escolhida = st.selectbox(
-        "Selecione a conta",
-        todas_wabas_ids,
-        format_func=lambda x: st.session_state.data_by_waba[x]["name"],
+    waba_escolhida = st.multiselect(
+    "Selecione as contas",
+    todas_wabas_ids,
+    default=todas_wabas_ids,  # todas por padrão
+    format_func=lambda x: st.session_state.data_by_waba[x]["name"],
     )
 
-    df_current = st.session_state.data_by_waba[waba_escolhida]["df"]
+
+    dfs = [
+    st.session_state.data_by_waba[w]["df"]
+    for w in waba_escolhida
+    if not st.session_state.data_by_waba[w]["df"].empty
+    ]
+
+    df_current = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+
 
     if df_current.empty:
         st.warning("Sem dados para o período selecionado.")
