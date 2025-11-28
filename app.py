@@ -4,12 +4,10 @@ import datetime as dt
 from pathlib import Path
 from typing import Dict, Any, List
 import plotly.express as px
-import plotly.graph_objects as go
 import requests
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
-import json
 
 # =========================
 # Setup
@@ -36,8 +34,6 @@ APP_DIR = Path(__file__).resolve().parent
 
 if "data_by_waba" not in st.session_state:
     st.session_state.data_by_waba = {}
-if "selected_waba" not in st.session_state:
-    st.session_state.selected_waba = DEFAULT_WABA_ID or None
 
 # =========================
 # Helpers
@@ -65,20 +61,6 @@ def fetch_wabas_via_api(business_id: str, token: str) -> list[dict]:
     params = {"fields": "id,name", "access_token": token}
     items = _get_all_pages(url, params)
     return [{"id": it.get("id"), "name": it.get("name") or it.get("id")} for it in items if it.get("id")]
-
-@st.cache_data(ttl=600)
-def fetch_numbers_via_api(waba_id: str, token: str) -> list[dict]:
-    url = f"{BASE}/{waba_id}/phone_numbers"
-    params = {"fields": "id,display_phone_number,verified_name", "access_token": token}
-    items = _get_all_pages(url, params)
-    res = []
-    for it in items:
-        res.append({
-            "id": it.get("id"),
-            "display": it.get("display_phone_number") or "",
-            "name": it.get("verified_name") or "",
-        })
-    return res
 
 def to_epoch(d: dt.date, end=False) -> int:
     dt_obj = dt.datetime.combine(d, dt.time.max if end else dt.time.min)
@@ -421,7 +403,6 @@ with tab2:
     # ----------------------------
     # Data
     # ----------------------------
-    hoje = dt.date.today()
 
     ini, fim = start_date, end_date
 
@@ -441,7 +422,7 @@ with tab2:
         st.subheader(grupo)
         
         if numeros:
-            st.caption("Números filtrados: " + ", ".join(numeros))
+            st.caption("Números no grupo: " + ", ".join(numeros))
         else:
             st.caption("Nenhum número configurado para este grupo.")
 
