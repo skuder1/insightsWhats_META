@@ -439,6 +439,11 @@ with tab2:
         df_g = df_ciclo[df_ciclo["phone"].isin(numeros)]
 
         st.subheader(grupo)
+        
+        if numeros:
+            st.caption("Números filtrados: " + ", ".join(numeros))
+        else:
+            st.caption("Nenhum número configurado para este grupo.")
 
         if df_g.empty:
             st.warning("Nenhum dado encontrado para este grupo neste período.")
