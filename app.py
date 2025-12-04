@@ -55,7 +55,7 @@ def _get_all_pages(url, params):
         params = {}  
     return out
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=600, show_spinner=False)
 def fetch_wabas_via_api(business_id: str, token: str) -> list[dict]:
     url = f"{BASE}/{business_id}/owned_whatsapp_business_accounts"
     params = {"fields": "id,name", "access_token": token}
@@ -66,7 +66,7 @@ def to_epoch(d: dt.date, end=False) -> int:
     dt_obj = dt.datetime.combine(d, dt.time.max if end else dt.time.min)
     return int(dt_obj.timestamp())
 
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=600, show_spinner=False)
 def fetch_pricing_analytics(
     waba_id: str, start_epoch: int, end_epoch: int, token: str, granularity: str = "DAILY"
 ) -> Dict[str, Any]:
@@ -295,9 +295,14 @@ with tab1:
         df_group["period"] = df_group["date"] - pd.to_timedelta(df_group["date"].dt.weekday, unit="D")
     
     elif periodo == "Mensal":
-        df_group["period"] = df_group["date"].values.astype("datetime64[M]").astype("datetime64[D]")
-    
-    df_group["period"] = df_group["period"].dt.date
+    # começa dia 15
+        df_group["period"] = df_group["date"].apply(lambda d: (
+            dt.date(d.year, d.month, 15)
+            if d.day >= 15 else
+            dt.date(d.year if d.month > 1 else d.year - 1,
+                    d.month - 1 if d.month > 1 else 12,
+                    15)
+        ))
 
     # -----------------------------
     # CARDS
@@ -343,15 +348,18 @@ with tab1:
     )
 
     if mostrar_valores:
-        fig.update_traces(
-            mode="lines+markers+text",
-            text=grp["volume_total"],
-            textposition="top center"
-        )
+        fig.data[0].text = grp["volume_total"]
+        fig.data[0].textposition = "top center"
+
+        fig.data[1].text = grp["volume_pagas"]
+        fig.data[1].textposition = "top center"
+
+        for t in fig.data:
+            t.mode = "lines+markers+text"
     else:
-        fig.update_traces(
-            mode="lines+markers"
-        )
+        for t in fig.data:
+            t.mode = "lines+markers"
+
 
     st.plotly_chart(fig, width="stretch")
 
