@@ -369,7 +369,7 @@ with tab1:
     # -----------------------------
     tabela = (
     df_group.groupby(["period", "waba", "phone"], as_index=False)
-        .agg(mensagens_pagas=("volume", "sum"))
+        .agg(mensagens_pagas=("volume_pagas", "sum"))
         .sort_values(["period", "waba", "phone"])
     )
 
