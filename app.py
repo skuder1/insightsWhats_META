@@ -287,22 +287,24 @@ with tab1:
 
     df_group = df.copy()
     df_group["date"] = pd.to_datetime(df_group["date"], errors="coerce")
-
+    
     if periodo == "Diário":
         df_group["period"] = df_group["date"]
-
     elif periodo == "Semanal":
         df_group["period"] = df_group["date"] - pd.to_timedelta(df_group["date"].dt.weekday, unit="D")
-    
     elif periodo == "Mensal":
-    # começa dia 15
         df_group["period"] = df_group["date"].apply(lambda d: (
             dt.date(d.year, d.month, 15)
             if d.day >= 15 else
             dt.date(d.year if d.month > 1 else d.year - 1,
-                    d.month - 1 if d.month > 1 else 12,
-                    15)
+                    d.month - 1 if d.month > 1 else 12, 15)
         ))
+
+    # Cria coluna volume_pagas
+    df_group["volume_pagas"] = df_group.apply(
+        lambda row: row["volume"] if row["pricing_type"].upper() in PAID_TYPES else 0,
+        axis=1
+    )
 
     # -----------------------------
     # CARDS
